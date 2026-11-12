@@ -206,8 +206,16 @@ export class FlowExecutor extends WithBrandConfig(Interface) implements StageHos
                 : this.ownerDocument.body;
 
         applyBackgroundImageProperty(background, { target });
+    }
 
-        for (const message of flowMessages(this.challenge?.flowInfo?.messages)) {
+    /**
+     * Display the messages sent with the current challenge.
+     *
+     * The server considers a message delivered once it is attached to a challenge, so this runs
+     * for every challenge received, whatever the layout.
+     */
+    #showFlowMessages() {
+        for (const message of flowMessages(this.flowInfo?.messages)) {
             showMessage(message);
         }
     }
@@ -277,6 +285,11 @@ export class FlowExecutor extends WithBrandConfig(Interface) implements StageHos
 
         if (changedProperties.has("flowInfo") || changedProperties.has("activeTheme")) {
             this.#synchronizeFlowInfo();
+        }
+
+        // `flowInfo` is a getter over `challenge`, so only a new challenge brings new messages.
+        if (changedProperties.has("challenge")) {
+            this.#showFlowMessages();
         }
     }
 
