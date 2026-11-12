@@ -9,7 +9,7 @@ from django.db.models import Model, QuerySet, TextChoices
 from django.utils.translation import gettext_lazy as _
 from dramatiq.actor import Actor
 
-from authentik.core.models import Group, User
+from authentik.core.models import Group, User, UserTypes
 from authentik.lib.config import advisory_lock_db_alias
 from authentik.lib.sync.outgoing.base import BaseOutgoingSyncClient
 from authentik.lib.utils.time import fqdn_rand, timedelta_from_string, timedelta_string_validator
@@ -124,3 +124,27 @@ class OutgoingSyncProvider(ScheduledModel, Model):
                 crontab=f"{fqdn_rand(self.pk)} */4 * * *",
             ),
         ]
+
+
+class OutgoingSyncUserGroupFilterMixin:
+    """Queryset for providers that exclude service accounts and optionally one group."""
+
+    exclude_users_service_account: bool
+    filter_group: Group | None
+
+    def get_object_qs(self, type: type[User | Group], **kwargs) -> QuerySet[User | Group]:
+        if type == User:
+            # Get queryset of all users with consistent ordering
+            # according to the provider's settings
+            base = User.objects.all().exclude_anonymous().filter(**kwargs)
+            if self.exclude_users_service_account:
+                base = base.exclude(type=UserTypes.SERVICE_ACCOUNT).exclude(
+                    type=UserTypes.INTERNAL_SERVICE_ACCOUNT
+                )
+            if self.filter_group:
+                base = base.filter(groups__in=[self.filter_group])
+            return base.order_by("pk")
+        if type == Group:
+            # Get queryset of all groups with consistent ordering
+            return Group.objects.all().filter(**kwargs).order_by("pk")
+        raise ValueError(f"Invalid type {type}")
